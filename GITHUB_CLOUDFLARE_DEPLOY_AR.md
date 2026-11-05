@@ -1,5 +1,8 @@
 # نشر «مسار» من منظمة محزم إلى Cloudflare — دليل الجوال
 
+
+> **تحديث 5 نوفمبر 2026:** الدليل الأحدث والأقصر هو [`GITHUB_CLOUDFLARE_MANUAL_AR.md`](./GITHUB_CLOUDFLARE_MANUAL_AR.md). يتيح GitHub Actions اكتشاف قاعدة D1 الموجودة بالاسم، دون تعديل معرفها في المستودع. الخطوات أدناه بديلة يدوية وليست شرطًا للنشر عبر Actions.
+
 ## تم إنجازه
 المشروع مرفوع ومُدمج في الفرع الرئيسي:
 https://github.com/Mehzm-xyz/Mjeed-Career-agent-
