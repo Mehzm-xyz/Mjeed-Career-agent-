@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "saudi-job-copilot",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-11-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "browser": { "binding": "MYBROWSER" },
+  "ai": { "binding": "AI" },
+  "d1_databases": [
+    { "binding": "JOBS_DB", "database_name": "saudi-job-copilot-db", "database_id": "REPLACE_WITH_D1_DATABASE_ID", "migrations_dir": "migrations" }
+  ],
+  "vars": {
+    "AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
+    "ENABLE_BROWSER_DEMO": "false"
+  }
+}
