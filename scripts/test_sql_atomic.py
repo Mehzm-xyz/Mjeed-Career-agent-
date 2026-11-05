@@ -1,6 +1,8 @@
 """SQLite regression checks for D1-compatible atomic SQL. Runs without dependencies."""
 import re
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -37,5 +39,23 @@ with TemporaryDirectory() as d:
     assert conn.execute(claim,('lease2','j13')).fetchone() is None
     conn.execute("UPDATE jobs SET prepare_claim='',prepare_claim_at=NULL WHERE id='j13'")
     assert conn.execute(claim,('lease2','j13')).fetchone() is not None
+    # Concurrent requests from independent connections: only the final daily slot wins.
+    for n in range(14, 26):
+        conn.execute('INSERT INTO jobs(id,dedup_key,title,company,city,url,is_linkedin) VALUES(?,?,?,?,?,?,1)',
+                     (f'j{n}',f'j{n}','Analyst','Company','Riyadh',f'https://linkedin.com/jobs/view/{n}'))
+        conn.execute('INSERT INTO applications(id,job_id) VALUES(?,?)',(f'a{n}',f'j{n}'))
+    for n in range(14, 23):
+        assert conn.execute(confirm,('proof','2026-11-06T06:00:00Z','2026-11-06',f'a{n}','2026-11-06')).fetchone()
+    conn.commit()
+    barrier=Barrier(2)
+    def race(app_id):
+        with sqlite3.connect(db,timeout=15) as other:
+            other.execute('PRAGMA busy_timeout=15000')
+            barrier.wait(timeout=10)
+            return other.execute(confirm,('proof','2026-11-06T06:00:00Z','2026-11-06',app_id,'2026-11-06')).fetchone() is not None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes=list(pool.map(race,['a23','a24']))
+    assert sorted(outcomes)==[False,True],f'Concurrent confirmations: {outcomes}'
+    assert conn.execute("SELECT COUNT(*) FROM applications a JOIN jobs j ON a.job_id=j.id WHERE a.sent_day='2026-11-06' AND j.is_linkedin=1").fetchone()[0]==10
     conn.close()
-print('PASS: migrations + D1 SQL atomic daily cap (10 LinkedIn, other portal unbounded) + AI claim')
+print('PASS: migrations + atomic LinkedIn daily cap (including 2-connection race) + other portal unbounded + AI claim')
