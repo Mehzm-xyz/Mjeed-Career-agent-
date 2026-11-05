@@ -1,21 +1,23 @@
-# مسار — حالة التنفيذ في 5 نوفمبر 2026
+# مسار — حالة تقنية للتنفيذ (5 نوفمبر 2026)
 
-## GitHub: اكتمل
-- المنظمة: `Mehzm-xyz`
-- المستودع: `Mjeed-Career-agent-` (عام؛ لا ترفع سيرة شخصية أو أسرارًا)
-- الفرع الرئيسي: `main`، يحتوي ملفات مسار في **جذر** المستودع.
-- تم دمج طلب السحب #1: https://github.com/Mehzm-xyz/Mjeed-Career-agent-/pull/1
-- تحققنا من وجود `wrangler.jsonc` وملفات Worker والاختبارات بعد الدمج.
-- نجحت اختبارات المنطق محليًا: **10/10**. فحص الأسرار: **PASS**.
+## GitHub — مكتمل
+- المستودع: https://github.com/Mehzm-xyz/Mjeed-Career-agent-
+- الفرع: `main`
+- إصلاحات الجودة الخمسة مدمجة: PR #3؛ فحصا GitHub Actions نجحا قبل الدمج.
+- اختبارات Node المحلية: **17/17 ناجحة**.
+- اختبار SQLite مستقل: **نجاح**، ويتضمن طلبين متزامنين يتنافسان على آخر خانة متاحة من أصل 10 LinkedIn.
+- مسار نشر Cloudflare الآمن دُمج: PR #4.
+- نشر Cloudflare لا يبدأ عند push؛ التشغيل يدوي فقط عبر `workflow_dispatch`.
 
-## Cloudflare: لم يُنشر بعد
-- لا يوجد وصول مباشر من هذا الاتصال إلى لوحة/واجهة Cloudflare API. لم نربط GitHub بـCloudflare أو ننشئ D1 أو نحفظ Secrets.
-- **عائق النشر الحالي:** `wrangler.jsonc` يحتوي `REPLACE_WITH_D1_DATABASE_ID`. يلزم إنشاء قاعدة D1 وربط معرّفها الحقيقي، وتطبيق migrations.
-- اختر في Workers Builds المستودع `Mehzm-xyz/Mjeed-Career-agent-`، الفرع `main`، وجذر المشروع `.`، واسم Worker مطابق لإعدادات Wrangler: `saudi-job-copilot`.
-- لم تُربط حسابات التقديم؛ اختبار المتصفح على نموذج وهمي فقط؛ الإرسال الحقيقي **غير مفعل**.
-- سر `APP_TOKEN` يحفظ في Cloudflare Worker Secrets، وليس في GitHub أو مستودع عام.
-- التعليمات العملية: `GITHUB_CLOUDFLARE_DEPLOY_AR.md`.
+## Cloudflare — لم يُنشر
+- **لا توجد أدلة نشر ناجح أو تشغيل D1 عن بعد.**
+- GitHub Actions يقرأ القائمة الحقيقية لقواعد D1 ويختار قاعدة موجودة بالاسم، ثم يولّد `.wrangler.ci.jsonc` مؤقتًا ويستخرج معرف D1؛ لا يتطلب تغيير `REPLACE_WITH_D1_DATABASE_ID` داخل المستودع.
+- لا ينشئ الإجراء قواعد D1 جديدة، ولا يحذف أو ينقل أي مورد.
+- يلزم حفظ 3 GitHub Actions Secrets: `CLOUDFLARE_API_TOKEN` و`CLOUDFLARE_ACCOUNT_ID` و`APP_TOKEN`. لا تخزن قيمها داخل Git أو التعليقات.
+- يجب تشغيل `Masar Cloudflare - inspect / deploy manually` أولًا مع `deploy=false` ثم مراجعة النتيجة قبل `deploy=true`.
+- التعليمات الحديثة: `GITHUB_CLOUDFLARE_MANUAL_AR.md`.
 
-## نطاق العمل
-- المرحلة **8/12 — MVP**.
-- لم ننقل مستودعات أخرى إلى المنظمة، ولم تتغير ملكية أي مشروع آخر.
+## نطاق إصدار MVP
+- API لإدارة الوظائف والمسودات والإرسال اليدوي المؤكد؛ **لا توجد تقديمات وظائف فعلية آلية**.
+- Browser Demo معطل افتراضيًا، ويختبر نموذجًا وهميًا فقط.
+- لا تعتبر اجتياز اختبارات الكود إثباتًا لاكتمال ربط Cloudflare أو صلاحيات منصات الوظائف.
