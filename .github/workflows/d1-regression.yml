@@ -1,0 +1,16 @@
+name: Masar D1 migration regression
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check D1 migrations and atomic quota
+        run: python3 scripts/test_sql_atomic.py
