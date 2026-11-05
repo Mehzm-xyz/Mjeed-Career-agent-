@@ -23,3 +23,8 @@ test('browser demo precondition does not mutate queue',()=>{
   assert.ok(section.indexOf("if(env.ENABLE_BROWSER_DEMO!=='true')")<section.indexOf('const result=await browserDemo'));
   assert.match(section,/passed\?'demo_passed':'queued'/);
 });
+
+test('migration reserves LinkedIn slots for preexisting human-confirmed applications',()=>{
+  assert.match(migration,/INSERT OR IGNORE INTO linkedin_daily_slots\(day,slot,application_id\)/);
+  assert.match(migration,/ROW_NUMBER\(\) OVER \(PARTITION BY a\.sent_day/);
+});
