@@ -1,5 +1,5 @@
 import { launch } from '@cloudflare/playwright';
-import { LIMITS, canSubmit, riyadhClock, safeText, validateJob } from './core.mjs';
+import { LIMITS, canSubmit, riyadhClock, safeText, validateJob, ATOMIC_CONFIRM_APPLICATION_SQL, CLAIM_PREPARATION_SQL, canRetryDemo } from './core.mjs';
 import { SOURCE_GROUPS } from './source-groups.mjs';
 import { ENGINE_REGISTRY, classifyPortal, evaluateSendGate } from './apply-engine.mjs';
 import { signedPayload, prepareMailPayload } from './gmail-bridge.mjs';
@@ -22,10 +22,10 @@ async function profile(env){return await env.JOBS_DB.prepare('SELECT * FROM prof
 async function jobById(env,id){return await env.JOBS_DB.prepare('SELECT * FROM jobs WHERE id=?').bind(id).first();}
 async function appById(env,id){return await env.JOBS_DB.prepare('SELECT * FROM applications WHERE id=?').bind(id).first();}
 async function confirmedLinkedInToday(env,day) {
-  const r=await env.JOBS_DB.prepare(`SELECT j.url,j.application_channel
+  const row=await env.JOBS_DB.prepare(`SELECT COUNT(*) AS n
     FROM applications a JOIN jobs j ON j.id=a.job_id
-    WHERE a.status='manually_sent' AND a.sent_day=?`).bind(day).all();
-  return (r.results||[]).filter(j=>classifyPortal(j.url,j.application_channel)==='linkedin').length;
+    WHERE a.status='manually_sent' AND a.sent_day=? AND j.is_linkedin=1`).bind(day).first();
+  return Number(row?.n||0);
 }
 async function spendFreeAIQuota(env){
   const day=riyadhClock().day;
@@ -104,14 +104,14 @@ export default {
     if(queueDemoMatch && request.method==='POST') {
       const row=await env.JOBS_DB.prepare('SELECT * FROM dispatch_queue WHERE id=?').bind(queueDemoMatch[1]).first();
       if(!row)return bad('الطلب غير موجود في الطابور',404);
-      if(row.status!=='queued')return bad('اختُبر هذا الطلب سابقًا',409);
-      // Preconditions must not consume queue state. The user can retry after setup.
-      if(env.ENABLE_BROWSER_DEMO!=='true') return bad('اختبار المتصفح مغلق. المهمة ما زالت في الانتظار.',403);
-      if(!env.MYBROWSER) return bad('ربط المتصفح غير متاح. المهمة ما زالت في الانتظار.',503);
+      if(!canRetryDemo(row.status))return bad('اختُبر هذا الطلب بنجاح أو أُلغي',409);
+      // Fail fast for missing bindings: do NOT mutate the queue row.
+      if(env.ENABLE_BROWSER_DEMO!=='true')return bad('اختبار المتصفح مغلق حتى تفعيل الإعداد',403);
+      if(!env.MYBROWSER)return bad('ربط المتصفح غير متاح',503);
       const result=await browserDemo(request,env);const v=await result.clone().json();
       const passed=result.ok && v.success===true;
-      await env.JOBS_DB.prepare(`UPDATE dispatch_queue SET status=?,note=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='queued'`).bind(passed?'demo_passed':'queued',passed?'اختبار نموذج وهمي ناجح؛ لا يوجد إرسال حقيقي':String(v.error||'فشل الاختبار').slice(0,200),row.id).run();
-      return json({id:row.id,demo_passed:passed,demo_result:v,real_submission:false,retryable:!passed},passed?200:502);
+      await env.JOBS_DB.prepare(`UPDATE dispatch_queue SET status=?,note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(passed?'demo_passed':'failed',passed?'اختبار نموذج وهمي ناجح؛ لا يوجد إرسال حقيقي':String(v.error||'فشل الاختبار').slice(0,200),row.id).run();
+      return json({id:row.id,demo_passed:passed,demo_result:v,real_submission:false},passed?200:502);
     }
 
     if(path==='/api/connectors' && request.method==='GET')return json({
@@ -149,7 +149,8 @@ export default {
       if(request.method==='POST') {
         const v=validateJob(await bodyJson(request));
         const id=crypto.randomUUID();
-        try {await env.JOBS_DB.prepare(`INSERT INTO jobs(id,dedup_key,title,company,city,url,description,application_channel,recruitment_email) VALUES(?,?,?,?,?,?,?,?,?)`).bind(id,v.dedup_key,v.title,v.company,v.city,v.url,v.description,v.application_channel,v.recruitment_email).run();}
+        const isLinkedIn=classifyPortal(v.url,v.application_channel)==='linkedin'?1:0;
+        try {await env.JOBS_DB.prepare(`INSERT INTO jobs(id,dedup_key,title,company,city,url,description,application_channel,recruitment_email,is_linkedin) VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(id,v.dedup_key,v.title,v.company,v.city,v.url,v.description,v.application_channel,v.recruitment_email,isLinkedIn).run();}
         catch(e){if(String(e).includes('UNIQUE')) return bad('هذه الفرصة موجودة مسبقًا',409); throw e;}
         return json({created:true,id},201);
       }
@@ -166,12 +167,26 @@ export default {
         const analysis=await aiText(env,p,job,'analysis');
         await env.JOBS_DB.prepare('UPDATE jobs SET analysis=? WHERE id=?').bind(analysis,job.id).run();return json({analysis});
       }
+      // Check BEFORE consuming free AI calls; atomically lease the job to
+      // prevent concurrent repeated clicks from burning multiple quota units.
       const existing=await env.JOBS_DB.prepare('SELECT id FROM applications WHERE job_id=?').bind(job.id).first();
       if(existing) return bad('هناك طلب مُجهّز لهذه الفرصة بالفعل',409);
-      const text=await aiText(env,p,job,'prepare');
-      const id=crypto.randomUUID();
-      await env.JOBS_DB.prepare(`INSERT INTO applications(id,job_id,status,tailored_resume) VALUES(?,?,'draft',?)`).bind(id,job.id,text).run();
-      return json({created:true,id,tailored_resume:text},201);
+      const lease=crypto.randomUUID();
+      const claimed=await env.JOBS_DB.prepare(CLAIM_PREPARATION_SQL).bind(lease,job.id).first();
+      if(!claimed)return bad('الطلب مُجهّز أو قيد التجهيز الآن',409);
+      try {
+        const text=await aiText(env,p,job,'prepare');
+        const id=crypto.randomUUID();
+        try {
+          await env.JOBS_DB.prepare(`INSERT INTO applications(id,job_id,status,tailored_resume) VALUES(?,?,'draft',?)`).bind(id,job.id,text).run();
+        } catch (e) {
+          if(String(e).includes('UNIQUE'))return bad('هناك طلب مُجهّز لهذه الفرصة بالفعل',409);
+          throw e;
+        }
+        return json({created:true,id,tailored_resume:text},201);
+      } finally {
+        await env.JOBS_DB.prepare('UPDATE jobs SET prepare_claim=?,prepare_claim_at=NULL WHERE id=? AND prepare_claim=?').bind('',job.id,lease).run();
+      }
     }
     const appMatch=path.match(/^\/api\/applications\/([a-f0-9-]+)\/status$/);
     if(appMatch && request.method==='POST') {
@@ -181,31 +196,22 @@ export default {
       if(app.status==='manually_sent') return bad('طلب مسجل كمرسل؛ لا يمكن تكراره',409);
       const confirmation=safeText(v.confirmation,500);
       if(status==='manually_sent' && confirmation.length<5)return bad('أدخل رقم/نص تأكيد الإرسال الفعلي؛ لا يجوز تسجيل نجاح دون دليل');
-      const sentAt=status==='manually_sent'?new Date().toISOString():null;
-      const day=status==='manually_sent'?riyadhClock().day:null;
-      const job=status==='manually_sent'?await jobById(env,app.job_id):null;
-      const isLinkedIn=job && classifyPortal(job.url,job.application_channel)==='linkedin';
-      if(isLinkedIn) {
-        // A single D1 transaction reserves one of 10 unique daily slots, then
-        // confirms the matching application. Concurrent callers cannot obtain
-        // the same slot, even if they read the same previous count.
-        const reserve=env.JOBS_DB.prepare(`WITH RECURSIVE slots(n) AS (
-          SELECT 1 UNION ALL SELECT n+1 FROM slots WHERE n<10
-        ) INSERT OR IGNORE INTO linkedin_daily_slots(day,slot,application_id)
-        SELECT ?,n,? FROM slots
-        WHERE NOT EXISTS (SELECT 1 FROM linkedin_daily_slots s WHERE s.day=? AND s.slot=n)
-        AND EXISTS (SELECT 1 FROM applications a WHERE a.id=? AND a.status!='manually_sent')
-        ORDER BY n LIMIT 1 RETURNING slot`).bind(day,app.id,day,app.id);
-        const confirm=env.JOBS_DB.prepare(`UPDATE applications SET status='manually_sent',confirmation=?,sent_at=?,sent_day=?
-          WHERE id=? AND status!='manually_sent'
-          AND EXISTS(SELECT 1 FROM linkedin_daily_slots WHERE application_id=? AND day=?)
-          RETURNING id`).bind(confirmation,sentAt,day,app.id,app.id,day);
-        const [slotResult,updated]=await env.JOBS_DB.batch([reserve,confirm]);
-        if(!updated.results?.length) return bad(slotResult.results?.length?'تعذّر تسجيل الطلب':'وصلت إلى الحد اليومي لتقديمات LinkedIn (10)، أو سُجّل الطلب سابقًا',slotResult.results?.length?409:429);
-      } else {
-        const result=await env.JOBS_DB.prepare(`UPDATE applications SET status=?,confirmation=?,sent_at=?,sent_day=?
-          WHERE id=? AND status!='manually_sent' RETURNING id`).bind(status,confirmation,sentAt,day,app.id).all();
-        if(!result.results?.length) return bad('الطلب مسجل كمرسل؛ لا يمكن تكراره',409);
+      if(status==='manually_sent') {
+        // RECORD a human-confirmed submission only. One SQL statement checks
+        // the daily cap AND updates status so racing requests cannot overbook.
+        const today=riyadhClock().day;
+        const updated=await env.JOBS_DB.prepare(ATOMIC_CONFIRM_APPLICATION_SQL)
+          .bind(confirmation,new Date().toISOString(),today,app.id,today).first();
+        if(!updated){
+          const job=await jobById(env,app.job_id);
+          if(job?.is_linkedin && (await confirmedLinkedInToday(env,today))>=LIMITS.maxLinkedInApplicationsPerDay)
+            return bad('وصلت إلى الحد اليومي لتقديمات LinkedIn (10)',429);
+          return bad('الطلب مسجل أو تغيرت حالته بالفعل',409);
+        }
+      }else{
+        const result=await env.JOBS_DB.prepare(`UPDATE applications SET status=?,confirmation=?,sent_at=NULL,sent_day=NULL
+          WHERE id=? AND status!='manually_sent' RETURNING id`).bind(status,confirmation,app.id).first();
+        if(!result)return bad('تم تسجيل هذا الطلب مسبقًا',409);
       }
       return json({updated:true});
     }
