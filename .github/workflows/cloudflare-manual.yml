@@ -1,0 +1,83 @@
+name: Masar Cloudflare - inspect / deploy manually
+on:
+  workflow_dispatch:
+    inputs:
+      database_name:
+        description: 'Exact name of EXISTING D1 database in your Cloudflare account (does not create a database)'
+        required: true
+        type: string
+      deploy:
+        description: 'Deploy Worker + apply D1 migrations (false = only validate and dry-run)'
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: masar-cloudflare-production
+  cancel-in-progress: false
+jobs:
+  cloudflare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check core regression tests
+        run: npm test
+      - name: Check D1 atomic SQL and migrations locally
+        run: python3 scripts/test_sql_atomic.py
+      - name: Run secret preflight
+        run: npm run preflight
+      - name: Check Cloudflare credentials are configured without printing them
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing CLOUDFLARE_API_TOKEN secret'; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'Missing CLOUDFLARE_ACCOUNT_ID secret'; exit 1; }
+      - name: Resolve existing D1 database and create temporary config
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE_NAME: ${{ inputs.database_name }}
+        run: |
+          npx wrangler d1 list --json > "$RUNNER_TEMP/masar-d1-list.json"
+          node scripts/resolve-d1-ci.mjs "$RUNNER_TEMP/masar-d1-list.json" "$DATABASE_NAME" .wrangler.ci.jsonc
+      - name: Validate Worker bundle without publishing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --dry-run --config .wrangler.ci.jsonc
+      - name: Require APP_TOKEN only for live deployment
+        if: ${{ inputs.deploy }}
+        env:
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+        run: |
+          test "${#APP_TOKEN}" -ge 24 || { echo 'Missing APP_TOKEN secret or too short'; exit 1; }
+      - name: Apply remote D1 migrations (deploy mode only)
+        if: ${{ inputs.deploy }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler d1 migrations apply JOBS_DB --remote --config .wrangler.ci.jsonc
+      - name: Deploy Worker (deploy mode only)
+        if: ${{ inputs.deploy }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config .wrangler.ci.jsonc
+      - name: Configure Worker APP_TOKEN secret (deploy mode only)
+        if: ${{ inputs.deploy }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+        run: printf '%s' "$APP_TOKEN" | npx wrangler secret put APP_TOKEN --config .wrangler.ci.jsonc
+      - name: Clean temporary config
+        if: always()
+        run: rm -f .wrangler.ci.jsonc
