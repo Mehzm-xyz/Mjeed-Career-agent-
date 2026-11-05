@@ -1,37 +1,46 @@
-# نشر مسار من GitHub إلى Cloudflare — دليل الهاتف
+# نشر «مسار» من منظمة محزم إلى Cloudflare — دليل الجوال
 
-## حالة هذه النسخة
-هذه نسخة MVP تجريبية. محرك تقديم طلبات الوظائف الحقيقي غير مفعل؛ الاختبار المتاح للمتصفح يعمل على نموذج وهمي فقط. لا تدخل السيرة الحقيقية قبل ضبط APP_TOKEN والتحكم في الوصول.
+## تم إنجازه
+المشروع مرفوع ومُدمج في الفرع الرئيسي:
+https://github.com/Mehzm-xyz/Mjeed-Career-agent-
 
-## 1. وضع المشروع في GitHub
-المستودع المحدد: `Mj-aCRM/cloud-console-sample-build`.
-حافظ على الملفات القديمة في الجذر؛ أضف ملفات هذا المشروع في مجلد `masar/` (بحيث يكون `masar/wrangler.jsonc` موجودا).
-الربط الآلي من هذه المحادثة اصطدم بصلاحية GitHub integration (HTTP 403) ولم يتم رفع أي ملف. يمكن استخدام GitHub Codespaces في المتصفح لإضافة المجلد من ملفات ZIP ثم commit/push، أو تمكين موصل GitHub بصلاحية إنشاء الفروع والكتابة.
+- **جذر المشروع هو المستودع نفسه `.`**، وليس مجلدًا باسم `masar`.
+- Worker المعرّف في `wrangler.jsonc` اسمه **`saudi-job-copilot`**.
+- الاختبارات المحلية: **10/10 ناجحة**. لا يوجد إرسال وظائف فعلي أو ربط حسابات في هذا الإصدار.
+- المستودع **عام**. لا تنشر CV أو كلمات مرور أو الرموز داخله.
 
-## 2. إعداد Cloudflare (بدون حفظ رمز Cloudflare في GitHub)
-1. افتح Cloudflare Dashboard > Workers & Pages > D1، وأنشئ قاعدة اسمها `saudi-job-copilot-db` على الخطة المجانية بعد التحقق من عدم وجود رسوم إضافية.
-2. خذ `database_id` الخاص بها وضعه مكان `REPLACE_WITH_D1_DATABASE_ID` في `masar/wrangler.jsonc`، ثم commit؛ لا تعدّل البيانات السرية في الملف.
-3. أنشئ Worker جديدا باسم `saudi-job-copilot` من Workers & Pages > Create application، واختر GitHub كموفر المصدر.
-4. اختر المستودع `Mj-aCRM/cloud-console-sample-build` والفرع الذي يحتوي على المجلد `masar`، وحدد **Root directory: `masar`**.
-5. أمر النشر المقترح: `npx wrangler deploy`. عند استخدام Workers Builds غالبا تنشئ Cloudflare رمز بناء خاصا بها تلقائيا؛ لا يلزم GitHub Actions ولا وضع CF_API_TOKEN في GitHub لهذه الطريقة.
-6. قبل التشغيل الحقيقي، طبّق ترحيلات قاعدة D1 على البعيد: `npx wrangler d1 migrations apply JOBS_DB --remote` من بيئة عمل موثوقة أو بيئة إصدار مُعتمدة، بعد مراجعة المخطط.
-7. داخل Worker > Settings > Variables and Secrets، أضف Secret باسم `APP_TOKEN` بقيمة عشوائية قوية (لا تضعه في GitHub أو في المحادثة).
-8. اترك `ENABLE_BROWSER_DEMO=false` إلى أن يكون حسابك على Free وحصة Browser Run مؤكدة، ثم اختبر فقط النموذج الوهمي.
+## الخطوة 1 — إنشاء قاعدة D1 (قبل نشر Worker)
+1. ادخل https://dash.cloudflare.com/ بحسابك، واختر حساب Cloudflare المناسب.
+2. من **Storage & databases / D1** أنشئ قاعدة باسم `saudi-job-copilot-db`.
+3. انسخ قيمة **Database ID** (معرّف غير سري بحد ذاته).
+4. في GitHub افتح `wrangler.jsonc` من المستودع أعلاه، ثم Edit، واستبدل القيمة `REPLACE_WITH_D1_DATABASE_ID` بمعرّف قاعدة D1، واحفظ التعديل في `main`.
+5. طبّق ملفَي قاعدة البيانات `migrations/0001_init.sql` و`migrations/0002_dispatch.sql` على D1 من بيئة موثوقة، بالترتيب، أو بأمر `npx wrangler d1 migrations apply JOBS_DB --remote` بعد إعداد الربط المناسب.
 
-قد تتغير خطوات لوحة Cloudflare؛ المرجع: https://developers.cloudflare.com/workers/ci-cd/builds/configuration/ و https://developers.cloudflare.com/workers/configuration/secrets/
+**تنبيه:** لا تنشر قبل تغيير المعرّف؛ الإعداد الحالي غير مكتمل.
 
-## 3. سياسة الأسرار
-- `APP_TOKEN`: Cloudflare Worker runtime secret؛ لكل Worker/بيئة حسب الحاجة.
-- `CLOUDFLARE_API_TOKEN`: لا حاجة له مع Git integration المباشرة. إذا استخدمت GitHub Actions لاحقا، خزنه في GitHub Actions Secrets للمستودع المخصص، مع `CLOUDFLARE_ACCOUNT_ID`.
-- `Gmail`: يتطلب ربط موافقة مستقل؛ لا تحفظ كلمة مرور Google في كود المشروع.
-- GitHub Repository Secrets تخص المستودع فقط. Organization Secrets يمكن توزيعها على مستودعات محددة في مؤسسة، لكن لا تتوفر للمستودعات الخاصة تحت GitHub Free. لم يُنشأ أي سر في GitHub في هذه الجلسة.
-- راجع حدود Cloudflare Free قبل أي نشر؛ توقف عند انتهاء الحصص ولا تفعّل خطة مدفوعة.
+## الخطوة 2 — ربط GitHub بـCloudflare
+1. من **Workers & Pages → Create application → GitHub**، صرّح لتطبيق Cloudflare بالوصول إلى منظمة `Mehzm-xyz`، والمستودع `Mjeed-Career-agent-`.
+2. اختر المستودع `Mehzm-xyz/Mjeed-Career-agent-` والفرع `main`.
+3. اضبط **Root directory: `.`** واسم Worker: `saudi-job-copilot`.
+4. عند طلب أمر النشر، استخدم `npx wrangler deploy`، وأكمل فقط بعد التأكد من عدم وجود خطة أو خدمات مدفوعة.
+5. بعدها افتح عنوان `workers.dev` الناتج من Cloudflare واختبر `/api/health` والواجهة.
 
-## 4. التحقق بعد النشر
-- زيارة الصفحة العامة -> صفحة واجهة مسار تظهر.
-- API بدون APP_TOKEN -> يرفض الطلبات المحمية.
-- تطبيق migrations على D1 -> الجداول موجودة.
-- اختبار نموذج المتصفح الوهمي فقط -> لا يرسل طلب توظيف حقيقي.
-- اختبار `npm test` محليا -> عشرة اختبارات ناجحة بتاريخ 2026-11-05.
+المرجع الرسمي: https://developers.cloudflare.com/workers/ci-cd/builds/
 
-**غير منفّذ بعد:** الاتصال الفعلي بالحساب، تطبيق migrations البعيدة، تشغيل Browser Run السحابي، ربط Gmail، رفع CV، أو تقديم وظيفة.
+## الخطوة 3 — الأسرار والصلاحيات
+- داخل إعدادات Worker في Cloudflare، أنشئ **Secret** باسم `APP_TOKEN` بقيمة عشوائية قوية (24 حرفًا أو أكثر). لا تضفه لملفات GitHub.
+- مع الربط المباشر من Cloudflare إلى GitHub لا تحتاج إلى `CLOUDFLARE_API_TOKEN` في GitHub Actions.
+- إن اخترت Actions لاحقًا: خزّن رمزًا *جديدًا محدود الصلاحيات* في GitHub Actions Secrets، مع `CLOUDFLARE_ACCOUNT_ID`. لا تضع الأسرار في ملفات المشروع.
+- Repository Secrets تخص المستودع؛ Organization Secrets يمكن مشاركتها مع مستودعات مختارة وفق خطة GitHub وإعداداتها.
+- اترك `ENABLE_BROWSER_DEMO=false` حتى اختبار Browser Run على نموذج `public/try-form.html` الوهمي.
+
+المرجع: https://developers.cloudflare.com/workers/configuration/secrets/
+
+## ما لم يُنفّذ بعد
+- نشر Cloudflare واختبار البيئة السحابية
+- إنشاء D1 وتطبيق migrations وحفظ APP_TOKEN
+- ربط Gmail أو LinkedIn أو حسابات مواقع التوظيف
+- استيراد CV بصيغة PDF/DOCX
+- إرسال طلب توظيف حقيقي
+
+**السياسة:** تكلفة صفر، ولا إرسال تلقائي على مواقع فعلية قبل اختبار التكاملات والتحقق من الصلاحيات ونتائج الإرسال.
