@@ -16,7 +16,16 @@ export function canonicalJobKey(input) {
   const compact = s => String(s || '').trim().toLocaleLowerCase('en-US').replace(/\s+/g,' ');
   const url = compact(input.url);
   // Use the canonical public URL when present, otherwise company and job title.
-  if (url) { const u = new URL(url); if (u.protocol !== 'https:') throw new Error('يسمح فقط بروابط HTTPS'); u.search=''; u.hash=''; return `url:${u.hostname}${u.pathname.replace(/\/$/,'')}`; }
+  if (url) {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') throw new Error('يسمح فقط بروابط HTTPS');
+    u.hash='';
+    // Keep identifiers in query parameters; discard only recognized marketing tags.
+    const tracking = /^(utm_[^=]*|fbclid|gclid|dclid|msclkid|ref|referrer|source|campaign)$/i;
+    for (const key of [...u.searchParams.keys()]) if (tracking.test(key)) u.searchParams.delete(key);
+    u.searchParams.sort();
+    return `url:${u.hostname.toLowerCase()}${u.pathname.replace(/\/$/,'')}${u.search}`;
+  }
   return `job:${compact(input.company)}::${compact(input.title)}`;
 }
 export function validateJob(input) {

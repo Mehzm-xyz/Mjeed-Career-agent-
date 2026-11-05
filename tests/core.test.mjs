@@ -21,3 +21,12 @@ test('reject malformed or untrusted job payloads',()=>{
   assert.throws(()=>validateJob({title:'',company:'y'}));
   assert.equal(validateJob({title:'Head of Partnerships',company:'Example',url:''}).dedup_key,'job:example::head of partnerships');
 });
+
+test('job query identifiers are distinct while tracking tags do not affect identity',()=>{
+  const a=canonicalJobKey({url:'https://careers.example.com/job?id=101&utm_source=one'});
+  const b=canonicalJobKey({url:'https://careers.example.com/job?utm_source=two&id=102'});
+  assert.notEqual(a,b);
+  assert.equal(a,canonicalJobKey({url:'https://careers.example.com/job?utm_source=other&id=101'}));
+  assert.equal(a,canonicalJobKey({url:'https://careers.example.com/job?id=101'}));
+  assert.equal(canonicalJobKey({url:'https://careers.example.com/job?b=2&a=1'}),canonicalJobKey({url:'https://careers.example.com/job?a=1&b=2'}));
+});
