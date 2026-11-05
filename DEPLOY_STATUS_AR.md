@@ -1,11 +1,21 @@
-# مسار — حالة التسليم 2026-11-05
+# مسار — حالة التنفيذ في 5 نوفمبر 2026
 
-- الملفات البرمجية والتصميم وقاعدة البيانات وطابور التجربة موجودة.
-- `npm test`: 10 اختبارات ناجحة.
-- `npm run preflight`: فحص الملفات لمنع رفع أسرار العرض والملفات الحساسة.
-- لم يُجرَ نشر Cloudflare، ولم يُربط حساب أو تُرسل طلبات وظائف.
-- فرع GitHub لم يُنشأ من أداة المحادثة: GitHub أعاد `403 Resource not accessible by integration` رغم إمكان القراءة.
-- المستودع المحدد: `Mj-aCRM/cloud-console-sample-build`. لا تستبدل محتوى المستودع القديم؛ ضع ملفات المشروع في المسار `masar/`.
-- قبل النشر: أنشئ D1، عوّض `database_id` في wrangler.jsonc، احفظ `APP_TOKEN` في Cloudflare Secrets، طبق migrations، ثم اختبر Health وواجهة المستخدم ورفض API غير المصرح.
-- لا تضع `CLOUDFLARE_API_TOKEN` ولا كلمات المرور في المستودع أو في محادثات GitHub Issues. ربط Cloudflare بـGitHub مباشرة يغني عن رمز GitHub Actions للنشر الاعتيادي.
-- تذكير: `ENABLE_BROWSER_DEMO` معطّل افتراضيًا؛ تشغيل الاختبار يحتاج حصة Browser Rendering المتاحة في حسابك، ولا يوجد إرسال حقيقي في هذا الإصدار.
+## GitHub: اكتمل
+- المنظمة: `Mehzm-xyz`
+- المستودع: `Mjeed-Career-agent-` (عام؛ لا ترفع سيرة شخصية أو أسرارًا)
+- الفرع الرئيسي: `main`، يحتوي ملفات مسار في **جذر** المستودع.
+- تم دمج طلب السحب #1: https://github.com/Mehzm-xyz/Mjeed-Career-agent-/pull/1
+- تحققنا من وجود `wrangler.jsonc` وملفات Worker والاختبارات بعد الدمج.
+- نجحت اختبارات المنطق محليًا: **10/10**. فحص الأسرار: **PASS**.
+
+## Cloudflare: لم يُنشر بعد
+- لا يوجد وصول مباشر من هذا الاتصال إلى لوحة/واجهة Cloudflare API. لم نربط GitHub بـCloudflare أو ننشئ D1 أو نحفظ Secrets.
+- **عائق النشر الحالي:** `wrangler.jsonc` يحتوي `REPLACE_WITH_D1_DATABASE_ID`. يلزم إنشاء قاعدة D1 وربط معرّفها الحقيقي، وتطبيق migrations.
+- اختر في Workers Builds المستودع `Mehzm-xyz/Mjeed-Career-agent-`، الفرع `main`، وجذر المشروع `.`، واسم Worker مطابق لإعدادات Wrangler: `saudi-job-copilot`.
+- لم تُربط حسابات التقديم؛ اختبار المتصفح على نموذج وهمي فقط؛ الإرسال الحقيقي **غير مفعل**.
+- سر `APP_TOKEN` يحفظ في Cloudflare Worker Secrets، وليس في GitHub أو مستودع عام.
+- التعليمات العملية: `GITHUB_CLOUDFLARE_DEPLOY_AR.md`.
+
+## نطاق العمل
+- المرحلة **8/12 — MVP**.
+- لم ننقل مستودعات أخرى إلى المنظمة، ولم تتغير ملكية أي مشروع آخر.
