@@ -56,12 +56,12 @@ function isLinkedInApp(a){try{return /(^|\.)linkedin\.com$/i.test(new URL(findJo
 function fillProfile(){const form=$('#profile-form');for(const [k,v] of Object.entries(state.profile)){if(form.elements[k]){if(form.elements[k].type==='checkbox')form.elements[k].checked=Boolean(v);else form.elements[k].value=v||'';}}}
 function openModal(id){$('#'+id).classList.remove('hidden');}
 function closeModal(id){$('#'+id).classList.add('hidden');}
-async function addJob(e){e.preventDefault();const v=Object.fromEntries(new FormData(e.currentTarget).entries());try{
+async function addJob(e){e.preventDefault();const form=e.currentTarget;const v=Object.fromEntries(new FormData(form).entries());try{
  if(mode==='demo'){
   if(state.jobs.some(x=>x.url&&v.url&&x.url.split('?')[0]===v.url.split('?')[0]))throw Error('هذه الفرصة موجودة مسبقًا');
   state.jobs.unshift({...v,id:crypto.randomUUID(),analysis:''});
  }else await api('jobs',{method:'POST',body:JSON.stringify(v)});
- closeModal('job-modal');e.currentTarget.reset();flash(mode==='demo'?'أُضيفت فرصة تجريبية محليًا، ولم تحفظ في السحابة':'حُفظت الفرصة',true);await refresh();go('jobs');
+ closeModal('job-modal');form.reset();flash(mode==='demo'?'أُضيفت فرصة تجريبية محليًا، ولم تحفظ في السحابة':'حُفظت الفرصة',true);await refresh();go('jobs');
  }catch(err){flash(err.message)}}
 async function saveProfile(e){e.preventDefault();const v=Object.fromEntries(new FormData(e.currentTarget).entries());v.relocation=Boolean(e.currentTarget.elements.relocation.checked);try{if(mode==='demo'){state.profile=v;flash('المعلومات في ذاكرة الاستعراض فقط؛ لا تضع سيرتك الحقيقية هنا.',true)}else{await api('profile',{method:'PUT',body:JSON.stringify(v)});flash('حُفظ ملفك المهني في قاعدة البيانات',true);await refresh()}}catch(err){flash(err.message)}}
 async function analyzeJob(id,prepare=false){try{
