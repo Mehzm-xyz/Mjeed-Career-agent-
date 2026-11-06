@@ -14,7 +14,7 @@ export function canSubmit(date = new Date(), linkedInSentToday = 0, channel = 'c
 }
 export function canonicalJobKey(input) {
   const compact = s => String(s || '').trim().toLocaleLowerCase('en-US').replace(/\s+/g,' ');
-  const url = compact(input.url);
+  const url = String(input.url||'').trim();
   // Preserve vacancy identifiers (id, jobId, gh_jid, etc.); remove known attribution only.
   if (url) {
     const u = new URL(url);

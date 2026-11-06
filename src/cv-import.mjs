@@ -1,4 +1,5 @@
 // Document ingestion. Never exposes uploaded bytes publicly or sends them to external endpoints.
+import {Buffer} from 'node:buffer';
 export const MAX_CV_BYTES = 2*1024*1024;
 export function cvKind(filename,bytes){
   const name=String(filename||'');
@@ -17,13 +18,15 @@ export async function extractCvText(name,bytes,parsers={}){
   else if(kind==='pdf'){
     const pdf=parsers.pdf || await import('unpdf');
     const proxy=await pdf.getDocumentProxy(new Uint8Array(bytes));
-    if(proxy.numPages>25)throw new Error('ملف PDF يتجاوز 25 صفحة');
-    const extracted=await pdf.extractText(proxy,{mergePages:true});
-    text=extracted.text;
-    if(typeof proxy.destroy==='function')await proxy.destroy();
+    try{
+      if(proxy.numPages>25)throw new Error('ملف PDF يتجاوز 25 صفحة');
+      const extracted=await pdf.extractText(proxy,{mergePages:true});
+      text=extracted.text;
+    }finally{if(typeof proxy.destroy==='function')await proxy.destroy();}
   }else{
     const mammoth=parsers.docx || await import('mammoth');
-    const result=await mammoth.extractRawText({arrayBuffer:bytes});
+    // The Node entry point (also used with Workers nodejs_compat) expects a Buffer.
+    const result=await mammoth.extractRawText({buffer:Buffer.from(new Uint8Array(bytes))});
     text=result.value;
   }
   text=String(text||'').replace(/[\u0000-\u0008\u000B-\u001F]/g,'').trim();
@@ -43,7 +46,7 @@ export async function importCvToProfile(env,file){
     await env.RESUME_BUCKET.put(`private/resumes/${id}`,bytes,{httpMetadata:{contentType:file.type||'application/octet-stream'},customMetadata:{filename:file.name.slice(0,180)}});
   }
   try{
-    await env.JOBS_DB.prepare('UPDATE profile SET resume_text=?,updated_at=CURRENT_TIMESTAMP WHERE id=1').bind(result.text).run();
+    await env.JOBS_DB.prepare("UPDATE profile SET resume_text=?,resume_source_url='',resume_original_url='',resume_sha256='',updated_at=CURRENT_TIMESTAMP WHERE id=1").bind(result.text).run();
   }catch(e){if(stored)await env.RESUME_BUCKET.delete(`private/resumes/${id}`).catch(()=>{});throw e;}
   return {imported:true,format:result.kind,characters:result.text.length,truncated:result.wasTruncated,original_stored_in_r2:stored};
 }

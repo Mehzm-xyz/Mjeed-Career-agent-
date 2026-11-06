@@ -30,3 +30,8 @@ test('job query identifiers are distinct while tracking tags do not affect ident
   assert.equal(a,canonicalJobKey({url:'https://careers.example.com/job?id=101'}));
   assert.equal(canonicalJobKey({url:'https://careers.example.com/job?b=2&a=1'}),canonicalJobKey({url:'https://careers.example.com/job?a=1&b=2'}));
 });
+
+test('URL vacancy IDs preserve case while host names and tracking still deduplicate',()=>{
+ assert.notEqual(canonicalJobKey({url:'https://example.org/jobs/AbC'}),canonicalJobKey({url:'https://example.org/jobs/abc'}));
+ assert.equal(canonicalJobKey({url:'https://EXAMPLE.org/jobs/AbC?utm_source=x'}),canonicalJobKey({url:'https://example.org/jobs/AbC'}));
+});

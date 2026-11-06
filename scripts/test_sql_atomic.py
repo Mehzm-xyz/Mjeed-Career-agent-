@@ -59,3 +59,18 @@ with TemporaryDirectory() as d:
     assert conn.execute("SELECT COUNT(*) FROM applications a JOIN jobs j ON a.job_id=j.id WHERE a.sent_day='2026-11-06' AND j.is_linkedin=1").fetchone()[0]==10
     conn.close()
 print('PASS: migrations + atomic LinkedIn daily cap (including 2-connection race) + other portal unbounded + AI claim')
+# Import the owner CV only into a blank profile, preserving existing edits and target roles.
+for existing in [False, True]:
+    c=sqlite3.connect(':memory:')
+    for path in sorted((root/'migrations').glob('*.sql')):
+        if path.name=='0005_owner_resume.sql' and existing:
+            c.execute("UPDATE profile SET full_name='Edited owner', resume_text='Existing edited resume',target_roles='Owner choice' WHERE id=1")
+        c.executescript(path.read_text())
+    name,resume,roles,original=c.execute('SELECT full_name,resume_text,target_roles,resume_original_url FROM profile WHERE id=1').fetchone()
+    if existing:
+        assert (name,resume,roles,original)==('Edited owner','Existing edited resume','Owner choice','')
+    else:
+        assert name=='Abdulmajeed Alamri' and "Bachelor's Degree in Hebrew Language" in resume and roles=='' and original.endswith('.pdf')
+    assert c.execute('SELECT COUNT(*) FROM job_sources').fetchone()[0]==4
+    c.close()
+print('PASS: factual owner CV seeded once + existing profile preserved + four verified board defaults')

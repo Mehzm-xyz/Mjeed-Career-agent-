@@ -14,10 +14,12 @@ async function api(path,options={}){
 async function refresh(){
  if(mode==='demo')return renderAll();
  if(!token){$('#connection-indicator').textContent='يحتاج ربطًا';openModal('auth-modal');return}
+ const refreshToken=token;
  try{
  const [status,p,j,a]=await Promise.all([api('status'),api('profile'),api('jobs'),api('applications')]);
+ if(token!==refreshToken)return;
  state.status=status;state.profile=p.profile;state.jobs=j.jobs;state.applications=a.applications;
- $('#connection-indicator').textContent='متصل بـCloudflare';renderAll();
+ $('#connection-indicator').textContent='متصل بـCloudflare';renderAll();await loadDiscoverySources();
  }catch(e){$('#connection-indicator').textContent='الاتصال غير متاح';flash(e.message);if(e.message.includes('غير مصرح'))openModal('auth-modal')}
 }
 function go(page){$$('.page').forEach(p=>p.classList.toggle('active',p.id===`page-${page}`));$$('.nav-btn').forEach(p=>p.classList.toggle('active',p.dataset.page===page));$('#crumb-name').textContent=({'dashboard':'نظرة عامة','jobs':'الفرص الوظيفية','profile':'ملفي المهني','applications':'طلبات التقديم','settings':'الإعدادات والتجارب'})[page]||'مسار';window.scrollTo({top:0,behavior:'smooth'});}
@@ -26,6 +28,7 @@ function empty(icon,title,detail){return `<div class="empty-state"><div class="e
 async function renderSourceGroups(){
  const el=$('#source-groups');if(!el)return;
  if(mode==='demo'){el.innerHTML='<p class="body-copy">قائمة المصادر مضافة لنسخة Cloudflare المنشورة، وليست اتصالات فعالة في هذه المعاينة.</p>';return;}
+ if(!token){el.textContent='اربط التطبيق أولًا لعرض المصادر.';return;}
  try{const res=await api('source-groups');
   el.innerHTML=res.groups.map(g=>`<article class="panel"><h3>${esc(g.name)}</h3><div class="body-copy">${g.items.map(i=>`<div style="margin:10px 0"><strong>${esc(i.name)}</strong> <small style="color:var(--muted)">[${esc(i.status)}]</small><div>${esc(i.apply)}</div></div>`).join('')}</div></article>`).join('');
  }catch(e){el.textContent='لم تُحمّل قنوات البحث: '+e.message;}
@@ -53,7 +56,7 @@ function renderApplications(){
 }
 function findJob(id){return state.jobs.find(j=>j.id===id)}
 function isLinkedInApp(a){try{return /(^|\.)linkedin\.com$/i.test(new URL(findJob(a.job_id)?.url||'').hostname)}catch{return false}}
-function fillProfile(){const form=$('#profile-form');for(const [k,v] of Object.entries(state.profile)){if(form.elements[k]){if(form.elements[k].type==='checkbox')form.elements[k].checked=Boolean(v);else form.elements[k].value=v||'';}}}
+function fillProfile(){const form=$('#profile-form');for(const [k,v] of Object.entries(state.profile)){if(form.elements[k]){if(form.elements[k].type==='checkbox')form.elements[k].checked=Boolean(v);else form.elements[k].value=v||'';}}const original=$('#download-original-cv');if(original)original.hidden=!state.profile.resume_original_url;}
 function openModal(id){$('#'+id).classList.remove('hidden');}
 function closeModal(id){$('#'+id).classList.add('hidden');}
 async function addJob(e){e.preventDefault();const form=e.currentTarget;const v=Object.fromEntries(new FormData(form).entries());try{
@@ -80,12 +83,14 @@ async function analyzeJob(id,prepare=false){try{
 async function markStatus(id){const app=state.applications.find(a=>a.id===id);if(!app)return;const choice=prompt('اكتب حالة الطلب:\nreview = يحتاج مراجعة\nunknown = نتيجة غير مؤكدة\ncancelled = إلغاء\nmanually_sent = أُرسل يدويًا بتأكيد','review');if(!choice)return;if(!['review','unknown','cancelled','manually_sent'].includes(choice)){flash('حالة غير صالحة');return}let confirmation='';if(choice==='manually_sent'){confirmation=prompt('اكتب تأكيدًا حقيقيًا من الجهة أو رقم الطلب. لا تستخدم هذا للإرسال الفعلي.','')||'';if(confirmation.length<5){flash('لا يمكن تسجيل إرسال دون تأكيد');return}}
  try{if(mode==='demo'){if(choice==='manually_sent' && isLinkedInApp(app) && state.applications.filter(a=>a.status==='manually_sent' && isLinkedInApp(a)).length>=10)throw Error('اكتمل الحد اليومي لتقديمات LinkedIn (10)');app.status=choice;app.confirmation=confirmation;flash('حُدثت حالة الاستعراض فقط',true)}else{await api(`applications/${id}/status`,{method:'POST',body:JSON.stringify({status:choice,confirmation})});flash('حُدثت الحالة',true)}await refresh()}catch(e){flash(e.message)}}
 function downloadText(id){const app=state.applications.find(a=>a.id===id);if(!app)return;const blob=new Blob([app.tailored_resume||''],{type:'text/plain;charset=utf-8'});const href=URL.createObjectURL(blob);const a=document.createElement('a');a.href=href;a.download='tailored-draft.txt';a.click();setTimeout(()=>URL.revokeObjectURL(href),1000);}
+async function downloadOriginalCv(){try{const response=await fetch('/api/cv/original',{headers:{authorization:`Bearer ${token}`}});if(!response.ok){const r=await response.json();throw Error(r.error||'تعذر تنزيل السيرة')}const href=URL.createObjectURL(await response.blob());const a=document.createElement('a');a.href=href;a.download='Abdulmajeed-Alamri-CV.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(href),1000);}catch(e){flash(e.message)}}
 async function browserTest(){const b=$('#run-browser-test'),out=$('#browser-test-result');b.disabled=true;out.textContent='يجري اختبار نموذج وهمي فقط…';try{if(mode==='demo'){out.textContent='نجاح الاستعراض المحلي: تم التحقق من نموذج وهمي على الصفحة فقط. لا يوجد متصفح Cloudflare فعلي هنا.';flash('نجحت محاكاة الواجهة، ويظل اختبار Cloudflare الحقيقي معلّقًا',true)}else{const r=await api('browser-demo',{method:'POST',body:'{}'});out.textContent=`${r.message} • ${r.confirmation} • ${r.duration_ms} مللي ثانية`;flash('نجح اختبار المتصفح السحابي الوهمي',true)}}catch(e){out.textContent=e.message;flash(e.message)}finally{b.disabled=false}}
 function authSave(e){e.preventDefault();const t=$('#admin-token').value.trim();if(t.length<24){flash('يجب إدخال رمز طويل لا يقل عن 24 حرفًا');return}token=t;sessionStorage.setItem('masar_token',t);closeModal('auth-modal');refresh();}
 
 async function loadDiscoverySources(){
  const el=$('#discovery-sources');if(!el)return;
  if(mode==='demo'){el.textContent='البحث الفعلي يتطلب نسخة Cloudflare المنشورة.';return;}
+ if(!token){el.textContent='اربط التطبيق أولًا لعرض مصادر الوظائف.';return;}
  try {const r=await api('discovery/sources');
   el.innerHTML=r.sources.length?r.sources.map(x=>`<div class="setting-row"><span>${esc(x.company)} • ${esc(x.provider)} / ${esc(x.board)}</span><button type="button" class="outline-btn" data-remove-source="${esc(x.id)}">حذف</button></div>`).join(''):'لا توجد مصادر مضافة.';
  }catch(e){el.textContent=e.message;}
@@ -102,7 +107,7 @@ async function importCv(e){e.preventDefault();const out=$('#cv-import-result');i
  const form=e.currentTarget;const data=new FormData(form);out.textContent='جاري استخراج نص السيرة...';
  try{const response=await fetch('/api/cv/import',{method:'POST',headers:{authorization:`Bearer ${token}`},body:data});const r=await response.json();if(!response.ok)throw Error(r.error||'فشل الاستيراد');out.textContent=`استُخرج ${r.characters} حرفًا (${r.format}). النسخة الأصلية ${r.original_stored_in_r2?'محفوظة في R2':'غير محفوظة'}.`;await refresh();flash('تم تحديث السيرة الأصلية بالنص المستخرج',true)}catch(e){out.textContent=e.message;flash(e.message)}
 }
-$('[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
+$$('[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
 document.addEventListener('click',e=>{const el=e.target.closest('[data-go],[data-analyze],[data-prepare],[data-download],[data-mark],[data-close],[data-remove-source]');if(!el)return;if(el.dataset.go)go(el.dataset.go);if(el.dataset.analyze)analyzeJob(el.dataset.analyze);if(el.dataset.prepare)analyzeJob(el.dataset.prepare,true);if(el.dataset.download)downloadText(el.dataset.download);if(el.dataset.mark)markStatus(el.dataset.mark);if(el.dataset.close)closeModal(el.dataset.close);if(el.dataset.removeSource&&mode!=='demo')api('discovery/sources/'+encodeURIComponent(el.dataset.removeSource),{method:'DELETE'}).then(loadDiscoverySources).catch(e=>flash(e.message))});
 $$('.modal-backdrop').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
 $('#add-job-open').addEventListener('click',()=>openModal('job-modal'));
@@ -110,11 +115,12 @@ $('#auth-open').addEventListener('click',()=>openModal('auth-modal'));
 $('#open-auth-settings').addEventListener('click',()=>openModal('auth-modal'));
 $('#job-form').addEventListener('submit',addJob);
 $('#cv-import-form').addEventListener('submit',importCv);
+$('#download-original-cv').addEventListener('click',downloadOriginalCv);
 $('#discovery-source-form').addEventListener('submit',addDiscoverySource);
 $('#discover-now').addEventListener('click',runDiscovery);
 $('#profile-form').addEventListener('submit',saveProfile);
 $('#auth-form').addEventListener('submit',authSave);
-$('#clear-auth').addEventListener('click',()=>{sessionStorage.removeItem('masar_token');token='';$('#admin-token').value='';flash('مسح الرمز من جلسة المتصفح',true)});
+$('#clear-auth').addEventListener('click',()=>{sessionStorage.removeItem('masar_token');token='';$('#admin-token').value='';state.jobs=[];state.applications=[];state.profile={};state.status={};$('#profile-form').reset();renderAll();$('#connection-indicator').textContent='يحتاج ربطًا';flash('مسح الرمز وبيانات الجلسة من الصفحة',true)});
 $('#job-filter').addEventListener('input',renderJobs);
 $('#run-browser-test').addEventListener('click',browserTest);
 window.addEventListener('keydown',e=>{if(e.key==='Escape')$$('.modal-backdrop').forEach(m=>closeModal(m.id))});

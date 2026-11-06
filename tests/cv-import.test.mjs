@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {cvKind,extractCvText,MAX_CV_BYTES,importCvToProfile} from '../src/cv-import.mjs';
 test('CV parser rejects unsupported formats, spoofed signatures, oversized uploads',()=>{
  assert.throws(()=>cvKind('virus.exe',new Uint8Array([1])));
@@ -11,6 +12,11 @@ test('text CV accepts UTF-8 Arabic without inventing values',async()=>{
  const input='مهندس تطوير أعمال ومبيعات، خبرة في العقود الحكومية وإدارة العلاقات مع العملاء.';
  const x=await extractCvText('resume.txt',new TextEncoder().encode(input));
  assert.equal(x.kind,'txt');assert.equal(x.text,input);
+});
+test('a real DOCX archive is parsed by the installed mammoth Node entry point',async()=>{
+ const fixture=readFileSync(new URL('./fixtures/resume.docx',import.meta.url));
+ const r=await extractCvText('resume.docx',new Uint8Array(fixture).buffer);
+ assert.equal(r.text,'Professional business development resume with verified sales experience.');
 });
 test('DOCX and PDF paths use documented extractors, no external API required',async()=>{
  const pdf=new Uint8Array([37,80,68,70,45]);

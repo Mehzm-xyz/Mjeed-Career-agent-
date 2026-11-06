@@ -12,3 +12,5 @@ node_modules/
 *.log
 .DS_Store
 .wrangler.ci.jsonc
+.wrangler.smoke.jsonc
+.wrangler.bundle.jsonc

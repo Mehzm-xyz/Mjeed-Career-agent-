@@ -16,11 +16,13 @@ jobs:
         with:
           node-version: '22'
       - name: Install deps (including PDF and DOCX parsers)
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Run all Node regression tests
         run: npm test
       - name: Validate SQLite/D1 migrations and concurrency
         run: python3 scripts/test_sql_atomic.py
+      - name: Exercise real local Worker and D1 runtime
+        run: npm run test:runtime
       - name: Scan for accidental secrets
         run: npm run preflight
       - name: Inject fake UUID for offline bundle test only

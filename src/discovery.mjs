@@ -74,10 +74,14 @@ export async function discoverAndSave(env,fetcher=fetch){
     try{
       const jobs=await fetchPublishedJobs(source,fetcher);
       seen+=jobs.length;
-      for(const job of jobs){
+      const statements=jobs.map(job=>{
         const id=crypto.randomUUID();
-        const result=await env.JOBS_DB.prepare(`INSERT OR IGNORE INTO jobs (id,dedup_key,title,company,city,url,description,application_channel,recruitment_email,is_linkedin) VALUES (?,?,?,?,?,?,?,?,?,0)`)
-          .bind(id,job.dedup_key,job.title,job.company,job.city,job.url,job.description,'portal','').run();
+        return env.JOBS_DB.prepare(`INSERT OR IGNORE INTO jobs (id,dedup_key,title,company,city,url,description,application_channel,recruitment_email,is_linkedin) VALUES (?,?,?,?,?,?,?,?,?,0)`)
+          .bind(id,job.dedup_key,job.title,job.company,job.city,job.url,job.description,'portal','');
+      });
+      // D1 batches count once against the Free plan's per-invocation query limit.
+      const results=statements.length?await env.JOBS_DB.batch(statements):[];
+      for(const result of results){
         if(result.meta?.changes)created++;else duplicate++;
       }
     }catch(e){errors.push({provider:source.provider,board:source.board,error:String(e.message||e).slice(0,180)});}

@@ -1,6 +1,7 @@
 import { launch } from '@cloudflare/playwright';
 import { validateBoard, discoverAndSave } from './discovery.mjs';
 import { importCvToProfile } from './cv-import.mjs';
+import { ORIGINAL_RESUME_URL, ORIGINAL_RESUME_SHA256 } from './resume-source.mjs';
 import { LIMITS, canSubmit, riyadhClock, safeText, validateJob, ATOMIC_CONFIRM_APPLICATION_SQL, CLAIM_PREPARATION_SQL, canRetryDemo } from './core.mjs';
 import { SOURCE_GROUPS } from './source-groups.mjs';
 import { ENGINE_REGISTRY, classifyPortal, evaluateSendGate } from './apply-engine.mjs';
@@ -82,6 +83,19 @@ export default {
   if(!env.JOBS_DB) return bad('قاعدة بيانات D1 غير مربوطة',503);
   try {
     const path=u.pathname;
+    if(path==='/api/cv/original' && request.method==='GET') {
+      const p=await profile(env);
+      if(p.resume_original_url!==ORIGINAL_RESUME_URL || p.resume_sha256!==ORIGINAL_RESUME_SHA256)
+        return bad('لا توجد نسخة أصلية مرتبطة بالسيرة الحالية',404);
+      const original=await fetch(ORIGINAL_RESUME_URL,{redirect:'error',signal:AbortSignal.timeout(10000)});
+      if(!original.ok)return bad('تعذر تنزيل أصل السيرة من صفحتك المهنية',502);
+      if(Number(original.headers.get('content-length')||0)>2097152)return bad('ملف السيرة أكبر من المسموح',502);
+      const bytes=await original.arrayBuffer();
+      if(bytes.byteLength>2097152)return bad('ملف السيرة أكبر من المسموح',502);
+      const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
+      if(hash!==ORIGINAL_RESUME_SHA256)return bad('تغير ملف السيرة الأصلي؛ أعد استيراده قبل استخدامه',409);
+      return new Response(bytes,{headers:{'content-type':'application/pdf','content-disposition':'attachment; filename="Abdulmajeed-Alamri-CV.pdf"','cache-control':'no-store','x-content-type-options':'nosniff'}});
+    }
     if(path==='/api/cv/import' && request.method==='POST') {
       const length=Number(request.headers.get('content-length')||0);
       if(length>2200000)return bad('ملف السيرة أكبر من 2 ميجابايت',413);
@@ -178,7 +192,12 @@ export default {
         const v=await bodyJson(request);
         const clean={full_name:safeText(v.full_name,130),email:safeText(v.email,250),phone:safeText(v.phone,50),resume_text:safeText(v.resume_text,20000),target_roles:safeText(v.target_roles,1300),city:safeText(v.city,100),relocation:v.relocation?1:0};
         if(clean.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean.email)) return bad('البريد غير صالح');
-        await env.JOBS_DB.prepare(`UPDATE profile SET full_name=?,email=?,phone=?,resume_text=?,target_roles=?,city=?,relocation=?,updated_at=CURRENT_TIMESTAMP WHERE id=1`).bind(clean.full_name,clean.email,clean.phone,clean.resume_text,clean.target_roles,clean.city||'الرياض',clean.relocation).run();
+        await env.JOBS_DB.prepare(`UPDATE profile SET full_name=?,email=?,phone=?,
+          resume_source_url=CASE WHEN resume_text=? THEN resume_source_url ELSE '' END,
+          resume_original_url=CASE WHEN resume_text=? THEN resume_original_url ELSE '' END,
+          resume_sha256=CASE WHEN resume_text=? THEN resume_sha256 ELSE '' END,
+          resume_text=?,target_roles=?,city=?,relocation=?,updated_at=CURRENT_TIMESTAMP WHERE id=1`)
+          .bind(clean.full_name,clean.email,clean.phone,clean.resume_text,clean.resume_text,clean.resume_text,clean.resume_text,clean.target_roles,clean.city||'الرياض',clean.relocation).run();
         return json({saved:true});
       }
     }
