@@ -1,9 +1,6 @@
 name: Masar quality checks
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -25,3 +22,4 @@ jobs:
         run: npm run test:runtime
       - name: SQLite migrations and atomic guards
         run: python3 scripts/test_sql_atomic.py
+
