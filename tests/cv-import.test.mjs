@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {cvKind,extractCvText,MAX_CV_BYTES,importCvToProfile} from '../src/cv-import.mjs';
+test('CV parser rejects unsupported formats, spoofed signatures, oversized uploads',()=>{
+ assert.throws(()=>cvKind('virus.exe',new Uint8Array([1])));
+ assert.throws(()=>cvKind('cv.pdf',new Uint8Array([0,1,2,3])));
+ assert.throws(()=>cvKind('cv.docx',new Uint8Array([0,1,2,3])));
+ assert.throws(()=>cvKind('cv.txt',new Uint8Array(MAX_CV_BYTES+1)));
+});
+test('text CV accepts UTF-8 Arabic without inventing values',async()=>{
+ const input='مهندس تطوير أعمال ومبيعات، خبرة في العقود الحكومية وإدارة العلاقات مع العملاء.';
+ const x=await extractCvText('resume.txt',new TextEncoder().encode(input));
+ assert.equal(x.kind,'txt');assert.equal(x.text,input);
+});
+test('DOCX and PDF paths use documented extractors, no external API required',async()=>{
+ const pdf=new Uint8Array([37,80,68,70,45]);
+ const parsers={pdf:{async getDocumentProxy(){return {numPages:1,destroy:async()=>{}}},async extractText(){return {text:'Arabic professional profile and achievements'.repeat(2)}}}};
+ const res=await extractCvText('resume.pdf',pdf,parsers);assert.match(res.text,/professional profile/);
+ const docx=new Uint8Array([80,75,3,4]);
+ const result=await extractCvText('resume.docx',docx.buffer,{docx:{async extractRawText(){return {value:'My professional experience and certifications'.repeat(2)}}}});
+ assert.match(result.text,/professional experience/);
+});
+test('profile import writes extracted text but stores no original bytes without opt-in R2',async()=>{
+ let saved='';
+ const env={JOBS_DB:{prepare(){return {bind(v){saved=v;return {async run(){return {success:true}}}}}}}};
+ const str='Experienced project and commercial development professional with B2B responsibilities.';
+ const bytes=new TextEncoder().encode(str);
+ const file={name:'resume.txt',size:bytes.byteLength,type:'text/plain',async arrayBuffer(){return bytes.buffer}};
+ const x=await importCvToProfile(env,file);
+ assert.equal(x.original_stored_in_r2,false);assert.equal(saved,str);
+});

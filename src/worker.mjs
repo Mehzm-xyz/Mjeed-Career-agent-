@@ -1,4 +1,6 @@
 import { launch } from '@cloudflare/playwright';
+import { validateBoard, discoverAndSave } from './discovery.mjs';
+import { importCvToProfile } from './cv-import.mjs';
 import { LIMITS, canSubmit, riyadhClock, safeText, validateJob, ATOMIC_CONFIRM_APPLICATION_SQL, CLAIM_PREPARATION_SQL, canRetryDemo } from './core.mjs';
 import { SOURCE_GROUPS } from './source-groups.mjs';
 import { ENGINE_REGISTRY, classifyPortal, evaluateSendGate } from './apply-engine.mjs';
@@ -80,6 +82,42 @@ export default {
   if(!env.JOBS_DB) return bad('قاعدة بيانات D1 غير مربوطة',503);
   try {
     const path=u.pathname;
+    if(path==='/api/cv/import' && request.method==='POST') {
+      const length=Number(request.headers.get('content-length')||0);
+      if(length>2200000)return bad('ملف السيرة أكبر من 2 ميجابايت',413);
+      if(!request.headers.get('content-type')?.startsWith('multipart/form-data'))return bad('أرسل السيرة كملف multipart',415);
+      const form=await request.formData();
+      return json(await importCvToProfile(env,form.get('file')));
+    }
+    if(path==='/api/discovery/sources') {
+      if(request.method==='GET') {
+        const r=await env.JOBS_DB.prepare('SELECT id,provider,board,company,enabled,created_at FROM job_sources ORDER BY created_at DESC LIMIT 50').all();
+        return json({sources:r.results||[]});
+      }
+      if(request.method==='POST') {
+        const v=validateBoard(await bodyJson(request));
+        const id=crypto.randomUUID();
+        const r=await env.JOBS_DB.prepare('INSERT OR IGNORE INTO job_sources(id,provider,board,company) VALUES(?,?,?,?)').bind(id,v.provider,v.board,v.company).run();
+        if(!r.meta?.changes)return bad('هذه اللوحة موجودة مسبقًا',409);
+        return json({id,created:true,provider:v.provider,board:v.board},201);
+      }
+    }
+    const sourceMatch=path.match(/^\/api\/discovery\/sources\/([a-f0-9-]+)$/);
+    if(sourceMatch && request.method==='DELETE') {
+      await env.JOBS_DB.prepare('DELETE FROM job_sources WHERE id=?').bind(sourceMatch[1]).run();
+      return json({deleted:true});
+    }
+    if(path==='/api/discovery/run' && request.method==='POST') {
+      const day=riyadhClock().day;
+      const quota=await env.JOBS_DB.prepare(`INSERT INTO usage_daily(day,category,calls) VALUES(?,'discovery',1)
+        ON CONFLICT(day,category) DO UPDATE SET calls=calls+1 WHERE calls<4 RETURNING calls`).bind(day).first();
+      if(!quota)return bad('انتهت حصة تحديث الوظائف اليدوي لهذا اليوم',429);
+      return json(await discoverAndSave(env));
+    }
+    if(path==='/api/discovery/runs' && request.method==='GET') {
+      const r=await env.JOBS_DB.prepare('SELECT run_at,sources,seen,created,errors FROM discovery_runs ORDER BY run_at DESC LIMIT 10').all();
+      return json({runs:r.results||[]});
+    }
     if(path==='/api/source-groups' && request.method==='GET')return json({groups:SOURCE_GROUPS,real_integrations_enabled:false});
     if(path==='/api/engines' && request.method==='GET')return json({engines:ENGINE_REGISTRY,auto_submit_enabled:false});
     if(path==='/api/dispatch' && request.method==='GET') {
@@ -222,5 +260,13 @@ export default {
     if(e instanceof SyntaxError)return bad('بيانات JSON غير صالحة');
     return bad(message.slice(0,280),400);
   }
+ },
+ async scheduled(controller,env,ctx){
+   if(env.ENABLE_JOB_DISCOVERY!=='true' || !env.JOBS_DB)return;
+   // Riyadh 09:00, 12:00 and 15:00 only. No job applications are submitted.
+   const day=riyadhClock(new Date(controller.scheduledTime||Date.now())).day;
+   const claimed=await env.JOBS_DB.prepare(`INSERT INTO usage_daily(day,category,calls) VALUES(?,'scheduled_discovery',1)
+     ON CONFLICT(day,category) DO UPDATE SET calls=calls+1 WHERE calls<3 RETURNING calls`).bind(day).first();
+   if(claimed)await discoverAndSave(env);
  }
 };
