@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {canonicalJobKey, ATOMIC_CONFIRM_APPLICATION_SQL, CLAIM_PREPARATION_SQL, canRetryDemo} from '../src/core.mjs';
 
-const worker=readFileSync(new URL('../src/worker.mjs',import.meta.url),'utf8');
+const worker=readFileSync(new URL('../src/app.mjs',import.meta.url),'utf8');
 const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 
 test('BUG-001 job form captured before first await, used after await',()=>{
@@ -34,5 +34,5 @@ test('BUG-005 browser demo disabled leaves queued attempt retryable',()=>{
   assert.equal(canRetryDemo('demo_passed'),false);
   const block=worker.split("if(queueDemoMatch && request.method==='POST')")[1].split("if(path==='/api/connectors'")[0];
   assert.ok(block.indexOf("env.ENABLE_BROWSER_DEMO!=='true'")<block.indexOf('const result=await browserDemo'));
-  assert.ok(block.indexOf('!env.MYBROWSER')<block.indexOf('const result=await browserDemo'));
+  assert.ok(block.indexOf('!env.BROWSER')<block.indexOf('const result=await browserDemo'));
 });

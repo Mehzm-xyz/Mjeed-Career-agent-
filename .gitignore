@@ -1,7 +1,5 @@
 node_modules/
-.wrangler/
-.dev.vars
-.dev.vars.*
+data/
 .env
 .env.*
 *.local
@@ -11,8 +9,4 @@ node_modules/
 *.pfx
 *.log
 .DS_Store
-.wrangler.ci.jsonc
-.wrangler.smoke.jsonc
-.wrangler.bundle.jsonc
-
 search-results/

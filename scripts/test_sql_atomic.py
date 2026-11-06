@@ -1,4 +1,4 @@
-"""SQLite regression checks for D1-compatible atomic SQL. Runs without dependencies."""
+"""SQLite regression checks for SQLite-compatible atomic SQL. Runs without dependencies."""
 import re
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor

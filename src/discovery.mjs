@@ -65,8 +65,8 @@ export async function fetchPublishedJobs(source,fetcher=fetch) {
   return normalizeBoardJobs(source.provider,JSON.parse(body),source);
 }
 export async function discoverAndSave(env,fetcher=fetch){
-  if(!env.JOBS_DB)throw new Error('D1 غير مربوطة');
-  const list=await env.JOBS_DB.prepare('SELECT id,provider,board,company FROM job_sources WHERE enabled=1 ORDER BY created_at ASC LIMIT 6').all();
+  if(!env.DB)throw new Error('قاعدة البيانات غير مربوطة');
+  const list=await env.DB.prepare('SELECT id,provider,board,company FROM job_sources WHERE enabled=1 ORDER BY created_at ASC LIMIT 6').all();
   const sources=list.results||[];
   let created=0,duplicate=0,seen=0;
   const errors=[];
@@ -76,18 +76,18 @@ export async function discoverAndSave(env,fetcher=fetch){
       seen+=jobs.length;
       const statements=jobs.map(job=>{
         const id=crypto.randomUUID();
-        return env.JOBS_DB.prepare(`INSERT OR IGNORE INTO jobs (id,dedup_key,title,company,city,url,description,application_channel,recruitment_email,is_linkedin) VALUES (?,?,?,?,?,?,?,?,?,0)`)
+        return env.DB.prepare(`INSERT OR IGNORE INTO jobs (id,dedup_key,title,company,city,url,description,application_channel,recruitment_email,is_linkedin) VALUES (?,?,?,?,?,?,?,?,?,0)`)
           .bind(id,job.dedup_key,job.title,job.company,job.city,job.url,job.description,'portal','');
       });
-      // D1 batches count once against the Free plan's per-invocation query limit.
-      const results=statements.length?await env.JOBS_DB.batch(statements):[];
+      // Batch writes avoid repeated transactions.
+      const results=statements.length?await env.DB.batch(statements):[];
       for(const result of results){
         if(result.meta?.changes)created++;else duplicate++;
       }
     }catch(e){errors.push({provider:source.provider,board:source.board,error:String(e.message||e).slice(0,180)});}
   }
   const stamp=new Date().toISOString();
-  await env.JOBS_DB.prepare('INSERT INTO discovery_runs(id,run_at,sources,seen,created,errors) VALUES(?,?,?,?,?,?)')
+  await env.DB.prepare('INSERT INTO discovery_runs(id,run_at,sources,seen,created,errors) VALUES(?,?,?,?,?,?)')
     .bind(crypto.randomUUID(),stamp,sources.length,seen,created,JSON.stringify(errors)).run();
   return {sources:sources.length,seen,created,duplicate,errors,real_applications_sent:0};
 }

@@ -87,13 +87,13 @@ export const SOURCE_GROUPS = [
         "id": "greenhouse",
         "name": "Greenhouse",
         "status": "candidate_submit_engine",
-        "apply": "أكواد إرسال مرشحة في GitHub، غير مدمجة أو مختبرة في Cloudflare."
+        "apply": "أكواد إرسال مرشحة في GitHub، غير مدمجة أو مختبرة في التطبيق."
       },
       {
         "id": "ashby",
         "name": "Ashby",
         "status": "candidate_submit_engine",
-        "apply": "أكواد إرسال مرشحة في GitHub، غير مدمجة أو مختبرة في Cloudflare."
+        "apply": "أكواد إرسال مرشحة في GitHub، غير مدمجة أو مختبرة في التطبيق."
       },
       {
         "id": "lever",

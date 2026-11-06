@@ -17,14 +17,14 @@ jobs:
           node-version: '22'
       - name: Check no credentials are in the sources
         run: node scripts/preflight.mjs
-      - name: Create complete Cloudflare source archive
+      - name: Create complete portable source archive
         run: |
-          zip -q -r -9 masar-cloudflare-source.zip . -x '.git/*' 'node_modules/*' '.wrangler/*' '.dev.vars' '.env' '*.zip' '*.pem' '*.key'
-          test -s masar-cloudflare-source.zip
-          unzip -t masar-cloudflare-source.zip | tail -1
+          zip -q -r -9 masar-source.zip . -x '.git/*' 'node_modules/*' '.env' '.env.*' 'data/*' 'search-results/*' '*.zip' '*.pem' '*.key'
+          test -s masar-source.zip
+          unzip -t masar-source.zip | tail -1
       - uses: actions/upload-artifact@v4
         with:
-          name: masar-cloudflare-complete-source
-          path: masar-cloudflare-source.zip
+          name: masar-complete-source
+          path: masar-source.zip
           if-no-files-found: error
           retention-days: 14

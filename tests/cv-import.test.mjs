@@ -26,12 +26,18 @@ test('DOCX and PDF paths use documented extractors, no external API required',as
  const result=await extractCvText('resume.docx',docx.buffer,{docx:{async extractRawText(){return {value:'My professional experience and certifications'.repeat(2)}}}});
  assert.match(result.text,/professional experience/);
 });
-test('profile import writes extracted text but stores no original bytes without opt-in R2',async()=>{
- let saved='';
- const env={JOBS_DB:{prepare(){return {bind(v){saved=v;return {async run(){return {success:true}}}}}}}};
- const str='Experienced project and commercial development professional with B2B responsibilities.';
- const bytes=new TextEncoder().encode(str);
- const file={name:'resume.txt',size:bytes.byteLength,type:'text/plain',async arrayBuffer(){return bytes.buffer}};
- const x=await importCvToProfile(env,file);
- assert.equal(x.original_stored_in_r2,false);assert.equal(saved,str);
+test('profile import atomically keeps the exact original and extracted text',async()=>{
+ const {openDatabase}=await import('../src/database.mjs');
+ const DB=openDatabase(':memory:');
+ try{
+  const str='Experienced project and commercial development professional with B2B responsibilities.';
+  const bytes=new TextEncoder().encode(str);
+  const file={name:'resume.txt',size:bytes.byteLength,type:'text/plain',async arrayBuffer(){return bytes.buffer}};
+  const x=await importCvToProfile({DB},file);
+  assert.equal(x.original_stored,true);
+  const p=await DB.prepare('SELECT * FROM profile WHERE id=1').first();
+  const stored=await DB.prepare('SELECT * FROM profile_files WHERE id=1').first();
+  assert.equal(p.resume_text,str);assert.equal(Buffer.from(stored.content_base64,'base64').toString(),str);
+  assert.equal(stored.sha256,p.resume_sha256);
+ }finally{DB.close()}
 });

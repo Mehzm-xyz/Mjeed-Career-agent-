@@ -45,7 +45,7 @@ export function safeText(s,max=4000) { return String(s??'').trim().slice(0,max);
 
 
 // Both checks and mutations run inside ONE SQLite statement. Never split quota checks
-// from writes into independent D1 requests: concurrent confirmations can pass both.
+// from writes into independent database requests: concurrent confirmations can pass both.
 export const ATOMIC_CONFIRM_APPLICATION_SQL = `UPDATE applications
   SET status='manually_sent', confirmation=?, sent_at=?, sent_day=?
   WHERE id=? AND status!='manually_sent'

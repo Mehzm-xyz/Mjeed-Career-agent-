@@ -51,10 +51,10 @@ test('discovery persists only unique jobs, reports source failures without fake 
    };}
  };
  const fetcher=async()=>({ok:true,headers:{get:()=>null},text:async()=>JSON.stringify({jobs:[{title:'Analyst',absolute_url:'https://boards.greenhouse.io/x/jobs/1',location:{name:'Riyadh'}}]})});
- const r=await discoverAndSave({JOBS_DB:db},fetcher);
+ const r=await discoverAndSave({DB:db},fetcher);
  assert.equal(inserts,1);assert.equal(r.created,1);assert.equal(r.real_applications_sent,0);
 });
-test('420 vacancies use six D1 write batches instead of exceeding the Free query limit',async()=>{
+test('420 vacancies use six database write batches',async()=>{
  let batches=0,rows=0;
  const sources=Array.from({length:6},(_,i)=>({...source,board:`board${i}`}));
  const db={
@@ -62,6 +62,6 @@ test('420 vacancies use six D1 write batches instead of exceeding the Free query
   async batch(statements){batches++;rows+=statements.length;return statements.map(()=>({meta:{changes:1}}))}
  };
  const jobs=Array.from({length:70},(_,i)=>({title:`Sales ${i}`,absolute_url:`https://example.org/jobs/${i}`,location:{name:'Riyadh'}}));
- const r=await discoverAndSave({JOBS_DB:db},async()=>({ok:true,headers:new Headers(),text:async()=>JSON.stringify({jobs})}));
+ const r=await discoverAndSave({DB:db},async()=>({ok:true,headers:new Headers(),text:async()=>JSON.stringify({jobs})}));
  assert.equal(batches,6);assert.equal(rows,420);assert.equal(r.created,420);assert.deepEqual(r.errors,[]);
 });
