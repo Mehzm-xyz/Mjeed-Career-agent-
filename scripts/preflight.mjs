@@ -8,7 +8,7 @@ if (config?.vars?.ENABLE_BROWSER_DEMO !== 'false') warn.push('Demo browser is en
 if (config?.d1_databases?.some(db => !db.database_id || db.database_id.includes('REPLACE_'))) warn.push('D1 database ID is a placeholder: create D1 and set it before Cloudflare deployment.');
 const forbiddenFiles = /(^|\/)(\.env(?:\..*)?|\.dev\.vars|\.npmrc|id_rsa|\.pem)$/;
 const patterns = [
-  /cfat_[A-Za-z0-9_-]{20,}/g,
+  /cf(?:at|ut)_[A-Za-z0-9_-]{20,}/g,
   /(?:sk-proj-|sk-)[A-Za-z0-9_-]{20,}/g,
   /gh[pousr]_[A-Za-z0-9]{25,}/g,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g,
