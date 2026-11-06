@@ -34,6 +34,11 @@ test('Lever and Ashby adapt source job records without applying',()=>{
  ]},{provider:'ashby',board:'co',company:'Co'});
  assert.equal(lever.length,1);assert.equal(ashby.length,1);
 });
+test('Saudi secondary locations are discovered even if the primary location is abroad',()=>{
+ const lever=normalizeBoardJobs('lever',[{text:'Sales',hostedUrl:'https://jobs.lever.co/co/123',categories:{location:'London',allLocations:['Riyadh']}}],{provider:'lever',board:'co',company:'Co'});
+ const ashby=normalizeBoardJobs('ashby',{jobs:[{title:'Sales',jobUrl:'https://jobs.ashbyhq.com/co/1',location:'London',secondaryLocations:[{location:'Riyadh'}]}]},{provider:'ashby',board:'co',company:'Co'});
+ assert.equal(lever.length,1);assert.equal(ashby.length,1);
+});
 test('HTTP failures fail closed without any POST or arbitrary destinations',async()=>{
  let sent=0;
  await assert.rejects(fetchPublishedJobs(source,async(url,opts)=>{sent++;assert.equal(opts.method,'GET');return {ok:false,status:429};}),/429/);
@@ -53,3 +58,16 @@ test('discovery persists only unique jobs, reports source failures without fake 
  const r=await discoverAndSave({JOBS_DB:db},fetcher);
  assert.equal(inserts,1);assert.equal(r.created,1);assert.equal(r.real_applications_sent,0);
 });
+test('rotates through all boards including when an earlier board fails',async()=>{
+ const sources=Array.from({length:8},(_,i)=>({id:String(i),provider:'greenhouse',board:`board${i}`,company:'Example',checked:null}));
+ const visited=[];
+ const db={prepare(q){return {
+  async all(){assert.match(q,/ORDER BY last_checked_at/);return {results:[...sources].sort((a,b)=>(a.checked??'').localeCompare(b.checked??'')||a.id.localeCompare(b.id)).slice(0,6)};},
+  bind(...args){return {async run(){if(q.startsWith('UPDATE job_sources'))sources.find(s=>s.id===args[1]).checked=args[0];return {meta:{changes:1}};}};}
+ };}};
+ const fetcher=async url=>{const board=new URL(url).pathname.split('/')[3];visited.push(board);if(board==='board0')return {ok:false,status:500};return {ok:true,headers:{get:()=>null},text:async()=>'{"jobs":[]}'};};
+ const first=await discoverAndSave({JOBS_DB:db},fetcher);assert.equal(first.errors.length,1);
+ await discoverAndSave({JOBS_DB:db},fetcher);
+ assert.ok(visited.includes('board6'));assert.ok(visited.includes('board7'));
+});
+

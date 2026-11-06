@@ -39,10 +39,10 @@ export function normalizeBoardJobs(provider,data,source){
     items=data.jobs.map(j=>({title:j.title,url:j.absolute_url,location:j.location?.name,description:j.content,department:j.departments?.[0]?.name}));
   } else if(provider==='lever'){
     if(!Array.isArray(data))throw new Error('استجابة Lever غير صالحة');
-    items=data.map(j=>({title:j.text,url:j.hostedUrl,location:j.categories?.location || j.categories?.allLocations?.join(', '),description:j.descriptionPlain||j.description,department:j.categories?.team}));
+    items=data.map(j=>({title:j.text,url:j.hostedUrl,location:[j.categories?.location,...(j.categories?.allLocations||[])].filter(Boolean).join(', '),description:j.descriptionPlain||j.description,department:j.categories?.team}));
   } else if(provider==='ashby'){
     if(!Array.isArray(data?.jobs))throw new Error('استجابة Ashby غير صالحة');
-    items=data.jobs.filter(j=>j.isListed!==false).map(j=>({title:j.title,url:j.jobUrl||j.applyUrl,location:j.location||j.secondaryLocations?.map(x=>x.location).join(', '),description:j.descriptionPlain,department:j.department}));
+    items=data.jobs.filter(j=>j.isListed!==false).map(j=>({title:j.title,url:j.jobUrl||j.applyUrl,location:[j.location,...(j.secondaryLocations||[]).map(x=>x.location)].filter(Boolean).join(', '),description:j.descriptionPlain,department:j.department}));
   } else throw new Error('مزود غير مدعوم');
   const output=[];
   for(const item of items){
@@ -66,7 +66,9 @@ export async function fetchPublishedJobs(source,fetcher=fetch) {
 }
 export async function discoverAndSave(env,fetcher=fetch){
   if(!env.JOBS_DB)throw new Error('D1 غير مربوطة');
-  const list=await env.JOBS_DB.prepare('SELECT id,provider,board,company FROM job_sources WHERE enabled=1 ORDER BY created_at ASC LIMIT 6').all();
+  // Each run has a bounded budget, but previously the same six sources were
+  // always selected, leaving every later source permanently unsearched.
+  const list=await env.JOBS_DB.prepare('SELECT id,provider,board,company FROM job_sources WHERE enabled=1 ORDER BY last_checked_at ASC, created_at ASC, id ASC LIMIT 6').all();
   const sources=list.results||[];
   let created=0,duplicate=0,seen=0;
   const errors=[];
@@ -81,9 +83,12 @@ export async function discoverAndSave(env,fetcher=fetch){
         if(result.meta?.changes)created++;else duplicate++;
       }
     }catch(e){errors.push({provider:source.provider,board:source.board,error:String(e.message||e).slice(0,180)});}
+    // Advance failed sources too: a broken board must not starve other boards.
+    await env.JOBS_DB.prepare('UPDATE job_sources SET last_checked_at=? WHERE id=?').bind(new Date().toISOString(),source.id).run();
   }
   const stamp=new Date().toISOString();
   await env.JOBS_DB.prepare('INSERT INTO discovery_runs(id,run_at,sources,seen,created,errors) VALUES(?,?,?,?,?,?)')
     .bind(crypto.randomUUID(),stamp,sources.length,seen,created,JSON.stringify(errors)).run();
   return {sources:sources.length,seen,created,duplicate,errors,real_applications_sent:0};
 }
+
