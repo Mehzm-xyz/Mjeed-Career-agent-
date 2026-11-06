@@ -1,5 +1,8 @@
 # مسار — مساعد التوظيف الشخصي (MVP 0.1)
 
+> **مهم — الإصدار الأحدث:** ابدأ من [`CLOUDFLARE_FULL_DELIVERY_AR.md`](CLOUDFLARE_FULL_DELIVERY_AR.md) وتعليمات [`GITHUB_CLOUDFLARE_MANUAL_AR.md`](GITHUB_CLOUDFLARE_MANUAL_AR.md). بعض الفقرات أدناه تصف تاريخ إصدارات MVP القديمة، وليست حالة المشروع النهائية. لا يوجد إرسال تلقائي فعلي أو نشر Cloudflare متحقق منه حتى الآن.
+
+
 مشروع عربي بواجهة متجاوبة وخادم Cloudflare Worker وD1 وWorkers AI ومتصفح Cloudflare Browser Run.
 
 ## ما هو جاهز في الكود الآن؟
