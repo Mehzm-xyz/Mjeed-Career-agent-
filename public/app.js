@@ -82,17 +82,40 @@ async function markStatus(id){const app=state.applications.find(a=>a.id===id);if
 function downloadText(id){const app=state.applications.find(a=>a.id===id);if(!app)return;const blob=new Blob([app.tailored_resume||''],{type:'text/plain;charset=utf-8'});const href=URL.createObjectURL(blob);const a=document.createElement('a');a.href=href;a.download='tailored-draft.txt';a.click();setTimeout(()=>URL.revokeObjectURL(href),1000);}
 async function browserTest(){const b=$('#run-browser-test'),out=$('#browser-test-result');b.disabled=true;out.textContent='يجري اختبار نموذج وهمي فقط…';try{if(mode==='demo'){out.textContent='نجاح الاستعراض المحلي: تم التحقق من نموذج وهمي على الصفحة فقط. لا يوجد متصفح Cloudflare فعلي هنا.';flash('نجحت محاكاة الواجهة، ويظل اختبار Cloudflare الحقيقي معلّقًا',true)}else{const r=await api('browser-demo',{method:'POST',body:'{}'});out.textContent=`${r.message} • ${r.confirmation} • ${r.duration_ms} مللي ثانية`;flash('نجح اختبار المتصفح السحابي الوهمي',true)}}catch(e){out.textContent=e.message;flash(e.message)}finally{b.disabled=false}}
 function authSave(e){e.preventDefault();const t=$('#admin-token').value.trim();if(t.length<24){flash('يجب إدخال رمز طويل لا يقل عن 24 حرفًا');return}token=t;sessionStorage.setItem('masar_token',t);closeModal('auth-modal');refresh();}
-$$('[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
-document.addEventListener('click',e=>{const el=e.target.closest('[data-go],[data-analyze],[data-prepare],[data-download],[data-mark],[data-close]');if(!el)return;if(el.dataset.go)go(el.dataset.go);if(el.dataset.analyze)analyzeJob(el.dataset.analyze);if(el.dataset.prepare)analyzeJob(el.dataset.prepare,true);if(el.dataset.download)downloadText(el.dataset.download);if(el.dataset.mark)markStatus(el.dataset.mark);if(el.dataset.close)closeModal(el.dataset.close)});
+
+async function loadDiscoverySources(){
+ const el=$('#discovery-sources');if(!el)return;
+ if(mode==='demo'){el.textContent='البحث الفعلي يتطلب نسخة Cloudflare المنشورة.';return;}
+ try {const r=await api('discovery/sources');
+  el.innerHTML=r.sources.length?r.sources.map(x=>`<div class="setting-row"><span>${esc(x.company)} • ${esc(x.provider)} / ${esc(x.board)}</span><button type="button" class="outline-btn" data-remove-source="${esc(x.id)}">حذف</button></div>`).join(''):'لا توجد مصادر مضافة.';
+ }catch(e){el.textContent=e.message;}
+}
+async function addDiscoverySource(e){
+ e.preventDefault();if(mode==='demo'){flash('الاستعراض لا يحفظ مصادر حقيقية');return}
+ const form=e.currentTarget;
+ try{const v=Object.fromEntries(new FormData(form).entries());await api('discovery/sources',{method:'POST',body:JSON.stringify(v)});form.reset();await loadDiscoverySources();flash('أُضيف مصدر الوظائف',true)}catch(e){flash(e.message)}
+}
+async function runDiscovery(){const out=$('#discovery-result');if(mode==='demo'){out.textContent='لا يوجد بحث شبكي في وضع الاستعراض';return}
+ out.textContent='جلب بيانات الوظائف المنشورة...';try{const r=await api('discovery/run',{method:'POST',body:'{}'});out.textContent=`تم العثور على ${r.seen} وظيفة بالسعودية؛ أُضيفت ${r.created} فرصة جديدة. أخطاء المصادر: ${r.errors.length}`;await refresh()}catch(e){out.textContent=e.message;}
+}
+async function importCv(e){e.preventDefault();const out=$('#cv-import-result');if(mode==='demo'){out.textContent='استيراد الملفات يعمل فقط بعد النشر؛ لا تضع بياناتك في الاستعراض.';return}
+ const form=e.currentTarget;const data=new FormData(form);out.textContent='جاري استخراج نص السيرة...';
+ try{const response=await fetch('/api/cv/import',{method:'POST',headers:{authorization:`Bearer ${token}`},body:data});const r=await response.json();if(!response.ok)throw Error(r.error||'فشل الاستيراد');out.textContent=`استُخرج ${r.characters} حرفًا (${r.format}). النسخة الأصلية ${r.original_stored_in_r2?'محفوظة في R2':'غير محفوظة'}.`;await refresh();flash('تم تحديث السيرة الأصلية بالنص المستخرج',true)}catch(e){out.textContent=e.message;flash(e.message)}
+}
+$('[data-page]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
+document.addEventListener('click',e=>{const el=e.target.closest('[data-go],[data-analyze],[data-prepare],[data-download],[data-mark],[data-close],[data-remove-source]');if(!el)return;if(el.dataset.go)go(el.dataset.go);if(el.dataset.analyze)analyzeJob(el.dataset.analyze);if(el.dataset.prepare)analyzeJob(el.dataset.prepare,true);if(el.dataset.download)downloadText(el.dataset.download);if(el.dataset.mark)markStatus(el.dataset.mark);if(el.dataset.close)closeModal(el.dataset.close);if(el.dataset.removeSource&&mode!=='demo')api('discovery/sources/'+encodeURIComponent(el.dataset.removeSource),{method:'DELETE'}).then(loadDiscoverySources).catch(e=>flash(e.message))});
 $$('.modal-backdrop').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id)}));
 $('#add-job-open').addEventListener('click',()=>openModal('job-modal'));
 $('#auth-open').addEventListener('click',()=>openModal('auth-modal'));
 $('#open-auth-settings').addEventListener('click',()=>openModal('auth-modal'));
 $('#job-form').addEventListener('submit',addJob);
+$('#cv-import-form').addEventListener('submit',importCv);
+$('#discovery-source-form').addEventListener('submit',addDiscoverySource);
+$('#discover-now').addEventListener('click',runDiscovery);
 $('#profile-form').addEventListener('submit',saveProfile);
 $('#auth-form').addEventListener('submit',authSave);
 $('#clear-auth').addEventListener('click',()=>{sessionStorage.removeItem('masar_token');token='';$('#admin-token').value='';flash('مسح الرمز من جلسة المتصفح',true)});
 $('#job-filter').addEventListener('input',renderJobs);
 $('#run-browser-test').addEventListener('click',browserTest);
 window.addEventListener('keydown',e=>{if(e.key==='Escape')$$('.modal-backdrop').forEach(m=>closeModal(m.id))});
-renderAll();refresh();
+renderAll();refresh();loadDiscoverySources();
