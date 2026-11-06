@@ -14,3 +14,5 @@ node_modules/
 .wrangler.ci.jsonc
 .wrangler.smoke.jsonc
 .wrangler.bundle.jsonc
+
+search-results/

@@ -12,10 +12,10 @@ test('protected API routes expose discovery and CV without leaking into public a
   assert.ok(worker.indexOf(path)>auth,`protected ${path}`);
  }
 });
-test('cron exists but stays disabled until explicit switch',()=>{
+test('cron is guarded and enabled after owner requested deployment',()=>{
  assert.match(worker,/async scheduled\(controller,env,ctx\)/);
  assert.match(worker,/ENABLE_JOB_DISCOVERY!=='true'/);
- assert.equal(wrangler.vars.ENABLE_JOB_DISCOVERY,'false');
+ assert.equal(wrangler.vars.ENABLE_JOB_DISCOVERY,'true');
  assert.deepEqual(wrangler.triggers.crons,['0 6,9,12 * * *']);
 });
 test('frontend has real controls and no claim of automatic live applications',()=>{

@@ -10,7 +10,8 @@
     "db:local": "wrangler d1 migrations apply JOBS_DB --local",
     "db:remote": "wrangler d1 migrations apply JOBS_DB --remote",
     "preflight": "node scripts/preflight.mjs",
-    "test:runtime": "node scripts/smoke-local.mjs"
+    "test:runtime": "node scripts/smoke-local.mjs",
+    "jobs:search": "node scripts/search-jobs.mjs"
   },
   "devDependencies": {
     "@cloudflare/playwright": "^1.3.0",
