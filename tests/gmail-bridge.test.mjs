@@ -14,3 +14,9 @@ test('email payload requires verified address, cover letter and resume',()=>{
  assert.throws(()=>prepareMailPayload({recipient:'careers@example.com',coverLetter:'',attachmentText:'cv'}));
  assert.equal(prepareMailPayload({recipient:'careers@example.com',fullName:'Test',jobTitle:'Partnerships',company:'Example',coverLetter:'Letter',attachmentText:'CV'}).recipient,'careers@example.com');
 });
+test('subject follows message language and accepts an explicit localized subject safely',()=>{
+ const p={recipient:'recruiter@example.invalid',fullName:'TEST ONLY',jobTitle:'Fictional Role',company:'Fictional',coverLetter:'Dear hiring team, this is a test.',attachmentText:'TEST CV'};
+ assert.match(prepareMailPayload(p).subject,/^Application:/);
+ assert.match(prepareMailPayload({...p,language:'ar'}).subject,/^طلب توظيف:/);
+ assert.equal(prepareMailPayload({...p,subject:'Candidature\r\nTest'}).subject,'Candidature  Test');
+});

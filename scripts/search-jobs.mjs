@@ -4,6 +4,7 @@ import {resolve,extname,join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fetchPublishedJobs} from '../src/discovery.mjs';
 import {rankJobs} from '../src/job-match.mjs';
+import {hiringSignals} from '../src/outreach-policy.mjs';
 import {extractCvText} from '../src/cv-import.mjs';
 import {ORIGINAL_RESUME_URL,ORIGINAL_RESUME_SHA256} from '../src/resume-source.mjs';
 
@@ -26,7 +27,7 @@ const errors=[],all=[];
 responses.forEach((r,i)=>{if(r.status==='fulfilled')all.push(...r.value);else errors.push({company:sources[i].company,error:String(r.reason.message||r.reason)})});
 const unique=[...new Map(all.map(j=>[j.dedup_key,j])).values()];
 const ranked=rankJobs(unique,profile).filter(j=>profile.target_roles?j.is_target_role:j.match_score>=20);
-const result={searched_at:new Date().toISOString(),sources:sources.length,saudi_jobs:unique.length,candidates:ranked.length,source_errors:errors,jobs:ranked,applications_sent:0};
+const result={searched_at:new Date().toISOString(),sources:sources.length,saudi_jobs:unique.length,candidates:ranked.length,source_errors:errors,company_signals:hiringSignals(ranked),jobs:ranked,applications_sent:0};
 if(output){
  const dir=resolve(output);await mkdir(dir,{recursive:true});
  await writeFile(join(dir,'jobs.json'),JSON.stringify(result,null,2));

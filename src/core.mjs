@@ -37,6 +37,8 @@ export function validateJob(input) {
   if (clean.title.length>180 || clean.company.length>180 || clean.description.length>18000 || clean.city.length>100 || clean.url.length>1400) throw new Error('الحقول أطول من الحد المسموح');
   if (!['portal','email','government','manual'].includes(clean.application_channel)) throw new Error('قناة تقديم غير صالحة');
   if (clean.recruitment_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean.recruitment_email)) throw new Error('بريد التوظيف غير صالح');
+  clean.employer_type=String(input.employer_type||'unknown');
+  if(!['unknown','government','private'].includes(clean.employer_type))throw new Error('نوع الجهة غير صالح');
   clean.dedup_key=canonicalJobKey(clean); return clean;
 }
 export function safeText(s,max=4000) { return String(s??'').trim().slice(0,max); }

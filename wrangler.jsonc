@@ -30,7 +30,7 @@
     }
   ],
   "vars": {
-    "AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
+    "AI_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
     "ENABLE_BROWSER_DEMO": "false",
     "ENABLE_JOB_DISCOVERY": "true",
     "ENABLE_CV_FILE_STORAGE": "false"
